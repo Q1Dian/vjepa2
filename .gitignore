@@ -30,3 +30,8 @@ app/vjepa_droid_v2/local/
 app/vjepa_droid_v3/local/
 app/vjepa_droid_v4/local/
 configs/local
+
+sample_video.mp4
+ssv2_classes.json
+room*.mp4
+P01_101*.mp4
