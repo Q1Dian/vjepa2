@@ -169,7 +169,8 @@ def main(args_eval, resume_preempt=False):
     )
     model_core = _unwrap_model(model)
     patches_per_step = int(model_core.grid_size**2) if hasattr(model_core, "grid_size") else None
-    model = DistributedDataParallel(model, static_graph=True)
+    if world_size > 1:
+        model = DistributedDataParallel(model, static_graph=True)
     optimizer = torch.optim.AdamW(
         (p for p in model.parameters() if p.requires_grad),
         lr=optimizer_lr,
@@ -280,8 +281,9 @@ def train_one_epoch(
     topk_ratio,
     patches_per_step,
 ):
-    model.module.encoder.eval()
-    model.module.predictor.train()
+    model_core = _unwrap_model(model)
+    model_core.encoder.eval()
+    model_core.predictor.train()
     losses = AverageMeter()
     data_iter = iter(data_loader)
 
@@ -330,8 +332,9 @@ def validate(
     topk_ratio,
     patches_per_step,
 ):
-    model.module.encoder.eval()
-    model.module.predictor.eval()
+    model_core = _unwrap_model(model)
+    model_core.encoder.eval()
+    model_core.predictor.eval()
     losses = AverageMeter()
     data_iter = iter(data_loader)
 
