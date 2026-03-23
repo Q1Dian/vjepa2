@@ -1,36 +1,36 @@
 nodes: 8
 tasks_per_node: 8
 cpus_per_task: 12
-tag: ek100-vitl16-384
+tag: ek100-vitb16-384
 eval_name: representation_anticipation_frozen
-folder: /home/jefferyfan/lab/eval/vjepa2/evals_2_1/vitl-384/ek100
-resume_checkpoint: true
+folder: /home/jefferyfan/lab/eval/vjepa2/evals_2_1/vitb-384/ek100
+resume_checkpoint: false
 experiment:
   classifier:
     num_probe_blocks: 4
     num_heads: 16
   data:
-    anticipation_time_sec:
+    anticipation_time_sec: 
     - 1.0
     - 1.0
-    auto_augment: true
+    auto_augment: false #changed from true
     file_format: 1
     dataset: EK100
     # e.g. /home/username/EPIC-KITCHENS
-    base_path: /home/jefferyfan/lab/data/ek100/videos
-    dataset_train: /home/jefferyfan/lab/data/ek100/EPIC_100_train.csv
-    dataset_val: /home/jefferyfan/lab/data/ek100/EPIC_100_validation.csv
+    base_path: /home/jefferyfan/lab/data/ek100_toy_384_alt2/videos
+    dataset_train: /home/jefferyfan/lab/data/ek100_toy_384_alt2/EPIC_100_train_toy.csv
+    dataset_val: /home/jefferyfan/lab/data/ek100_toy_384_alt2/EPIC_100_validation_toy.csv
     frames_per_clip: 32
     future_frames_per_clip: 8
     frames_per_second: 8
     motion_shift: false
-    num_workers: 2
+    num_workers: 6
     pin_memory: true
     random_resize_scale:
     - 0.08
     - 1.0
-    reprob: 0.25
-    resolution: 384
+    reprob: 0.25 # was 0.25
+    resolution: 384 #changed from 384
     train_anticipation_point:
     - 0.0
     - 0.25
@@ -41,7 +41,7 @@ experiment:
     num_epochs: 20
     batch_size: 2
     use_bfloat16: true
-    topk_ratio: 0.05
+    topk_ratio: 0.5
     multihead_kwargs:
       - weight_decay: 0.0001
         final_weight_decay: 0.0001
@@ -167,16 +167,16 @@ experiment:
         final_lr: 0.0
         warmup: 0.
 model_kwargs:
-  checkpoint: /home/jefferyfan/lab/EventSegmentation/checkpoints/vjepa2_1_vitl_dist_vitG_384.pt
+  checkpoint: /home/jefferyfan/lab/EventSegmentation/checkpoints/vjepa2_1_vitb_dist_vitG_384.pt
   module_name: evals.representation_anticipation_frozen.modelcustom.vit_encoder_predictor_concat_ar
   wrapper_kwargs:
     no_predictor: false
     num_output_frames: 2
-    num_steps: 8    # Might try num_output_frames=16, step=1 later
+    num_steps: 4    # Might try num_output_frames=16, step=1 later
   pretrain_kwargs:
     use_v2_1: true
     encoder:
-      model_name: vit_large
+      model_name: vit_base
       checkpoint_key: ema_encoder
       img_temporal_dim_size: 1
       tubelet_size: 2

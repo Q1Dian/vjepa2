@@ -110,7 +110,7 @@ class decode_videos_to_clips(wds.PipelineStage):
 
             # -- load clips corresponding to action annotations
             try:
-                vr = VideoReader(path, num_threads=15, ctx=cpu(0))
+                vr = VideoReader(path, num_threads=4, ctx=cpu(0))
                 vr.seek(0)
                 # --
                 vfps = vr.get_avg_fps()
@@ -142,7 +142,9 @@ class decode_videos_to_clips(wds.PipelineStage):
 
                 try:
                     context_buffer = vr.get_batch(context_indices).asnumpy()
+                    vr.seek(0)
                     future_buffer = vr.get_batch(future_indices).asnumpy()
+                    vr.seek(0)
                 except Exception as e:
                     logging.info(f"Encountered exception getting indices {e=}")
                     continue

@@ -49,23 +49,31 @@ def sigmoid_focal_loss(
     return loss
 
 
-def topk_representation_loss(predictions, targets, topk_ratio=0.25, reduction="mean"):
-    """Compute a top-k cosine loss over token-wise latent predictions.
+def topk_representation_loss(predictions, targets, topk_ratio=0.25, reduction="mean", patches_per_step=None):
+    """Compute top-k patch L1 loss for each temporal step.
 
-    predictions and targets are expected to have shape [B, N, D]. The loss is
-    the mean of the largest token-wise cosine distances per sample.
+    predictions and targets are expected to have shape [B, N, D], where N is
+    a flattened sequence of temporal steps and spatial patches. If
+    ``patches_per_step`` is provided and divides N, top-k is applied across
+    patches independently for each temporal step.
     """
     if predictions.shape != targets.shape:
         raise ValueError(f"predictions and targets must match, got {predictions.shape} vs {targets.shape}")
 
-    token_loss = 1.0 - F.cosine_similarity(predictions, targets, dim=-1)
-    token_count = token_loss.size(1)
+    patch_loss = F.l1_loss(predictions, targets, reduction="none").mean(dim=-1)
+    token_count = patch_loss.size(1)
     if token_count == 0:
         raise ValueError("topk_representation_loss received zero tokens")
 
     safe_ratio = min(1.0, max(0.0, float(topk_ratio)))
-    topk = max(1, int(token_count * safe_ratio))
-    topk_loss = token_loss.topk(topk, dim=1).values.mean(dim=1)
+    if patches_per_step is not None and patches_per_step > 0 and token_count % patches_per_step == 0:
+        temporal_steps = token_count // patches_per_step
+        patch_loss = patch_loss.reshape(patch_loss.size(0), temporal_steps, patches_per_step)
+        topk = max(1, int(patches_per_step * safe_ratio))
+        topk_loss = patch_loss.topk(topk, dim=2).values.mean(dim=(1, 2))
+    else:
+        topk = max(1, int(token_count * safe_ratio))
+        topk_loss = patch_loss.topk(topk, dim=1).values.mean(dim=1)
 
     if reduction == "mean":
         return topk_loss.mean()

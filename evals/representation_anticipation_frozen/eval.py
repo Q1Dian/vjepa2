@@ -167,6 +167,8 @@ def main(args_eval, resume_preempt=False):
         wrapper_kwargs=args_wrapper,
         device=device,
     )
+    model_core = _unwrap_model(model)
+    patches_per_step = int(model_core.grid_size**2) if hasattr(model_core, "grid_size") else None
     model = DistributedDataParallel(model, static_graph=True)
     optimizer = torch.optim.AdamW(
         (p for p in model.parameters() if p.requires_grad),
@@ -236,6 +238,7 @@ def main(args_eval, resume_preempt=False):
                 future_frames_per_clip=future_frames_per_clip,
                 use_bfloat16=use_bfloat16,
                 topk_ratio=topk_ratio,
+                patches_per_step=patches_per_step,
             )
         else:
             train_loss = float("nan")
@@ -248,6 +251,7 @@ def main(args_eval, resume_preempt=False):
             future_frames_per_clip=future_frames_per_clip,
             use_bfloat16=use_bfloat16,
             topk_ratio=topk_ratio,
+            patches_per_step=patches_per_step,
         )
 
         if rank == 0:
@@ -274,6 +278,7 @@ def train_one_epoch(
     future_frames_per_clip,
     use_bfloat16,
     topk_ratio,
+    patches_per_step,
 ):
     model.module.encoder.eval()
     model.module.predictor.train()
@@ -298,7 +303,12 @@ def train_one_epoch(
             with torch.no_grad():
                 targets = _encode_tokens(model, future_clips)
             predictions = _align_predictions_to_targets(predictions, targets)
-            loss = topk_representation_loss(predictions, targets, topk_ratio=topk_ratio)
+            loss = topk_representation_loss(
+                predictions,
+                targets,
+                topk_ratio=topk_ratio,
+                patches_per_step=patches_per_step,
+            )
 
         loss.backward()
         optimizer.step()
@@ -318,6 +328,7 @@ def validate(
     future_frames_per_clip,
     use_bfloat16,
     topk_ratio,
+    patches_per_step,
 ):
     model.module.encoder.eval()
     model.module.predictor.eval()
@@ -340,7 +351,12 @@ def validate(
             predictions = model(context_clips, zero_anticipation)
             targets = _encode_tokens(model, future_clips)
             predictions = _align_predictions_to_targets(predictions, targets)
-            loss = topk_representation_loss(predictions, targets, topk_ratio=topk_ratio)
+            loss = topk_representation_loss(
+                predictions,
+                targets,
+                topk_ratio=topk_ratio,
+                patches_per_step=patches_per_step,
+            )
 
         reduced_loss = _distributed_mean(loss.detach().item(), device)
         losses.update(reduced_loss, clips.size(0))
