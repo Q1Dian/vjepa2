@@ -3,7 +3,7 @@ tasks_per_node: 8
 cpus_per_task: 12
 tag: ek100-vitb16-384
 eval_name: representation_anticipation_frozen
-folder: /home/jefferyfan/lab/eval/vjepa2/evals_2_1/vitb-384/ek100p01
+folder: /home/jefferyfan/lab/eval/vjepa2/evals_2_1/vitb-384/ek100
 resume_checkpoint: false
 experiment:
   classifier:
@@ -17,10 +17,10 @@ experiment:
     file_format: 1
     dataset: EK100
     # e.g. /home/username/EPIC-KITCHENS
-    base_path: /home/jefferyfan/lab/data/ek100_toy_384_alt2_p01_big/videos
-    dataset_train: /home/jefferyfan/lab/data/ek100_toy_384_alt2_p01_big/EPIC_100_train_toy_p01_big.csv
-    dataset_val: /home/jefferyfan/lab/data/ek100_toy_384_alt2_p01_big/EPIC_100_validation_toy_p01_big.csv
-    frames_per_clip: 48
+    base_path: /home/jefferyfan/lab/data/ek100_toy_384_alt2/videos
+    dataset_train: /home/jefferyfan/lab/data/ek100_toy_384_alt2/EPIC_100_train_toy.csv
+    dataset_val: /home/jefferyfan/lab/data/ek100_toy_384_alt2/EPIC_100_validation_toy.csv
+    frames_per_clip: 32
     future_frames_per_clip: 8
     frames_per_second: 8
     motion_shift: false
@@ -41,7 +41,7 @@ experiment:
     num_epochs: 20
     batch_size: 2
     use_bfloat16: true
-    topk_ratio: 1
+    topk_ratio: 0.25
     multihead_kwargs:
       - weight_decay: 0.0001
         final_weight_decay: 0.0001

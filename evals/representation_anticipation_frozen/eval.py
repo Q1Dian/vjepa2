@@ -297,11 +297,10 @@ def train_one_epoch(
         anticipation_times = batch[-1].to(device)
 
         context_clips, future_clips = _split_context_future(clips, frames_per_clip, future_frames_per_clip)
-        zero_anticipation = torch.zeros_like(anticipation_times)
 
         optimizer.zero_grad(set_to_none=True)
         with torch.cuda.amp.autocast(dtype=torch.bfloat16, enabled=use_bfloat16):
-            predictions = model(context_clips, zero_anticipation)
+            predictions = model(context_clips, anticipation_times)
             with torch.no_grad():
                 targets = _encode_tokens(model, future_clips)
             predictions = _align_predictions_to_targets(predictions, targets)
@@ -348,10 +347,9 @@ def validate(
         anticipation_times = batch[-1].to(device)
 
         context_clips, future_clips = _split_context_future(clips, frames_per_clip, future_frames_per_clip)
-        zero_anticipation = torch.zeros_like(anticipation_times)
 
         with torch.cuda.amp.autocast(dtype=torch.bfloat16, enabled=use_bfloat16):
-            predictions = model(context_clips, zero_anticipation)
+            predictions = model(context_clips, anticipation_times)
             targets = _encode_tokens(model, future_clips)
             predictions = _align_predictions_to_targets(predictions, targets)
             loss = topk_representation_loss(

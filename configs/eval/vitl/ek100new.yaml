@@ -1,26 +1,26 @@
 nodes: 8
 tasks_per_node: 8
 cpus_per_task: 12
-tag: ek100-vitb16-384
+tag: ek100-vitl16
 eval_name: representation_anticipation_frozen
-folder: /home/jefferyfan/lab/eval/vjepa2/evals_2_1/vitb-384/ek100p01
+folder: /home/jefferyfan/lab/eval/vjepa2/evals_2/vitl-256/ek100toy
 resume_checkpoint: false
 experiment:
   classifier:
     num_probe_blocks: 4
     num_heads: 16
   data:
-    anticipation_time_sec: 
+    anticipation_time_sec:
     - 1.0
     - 1.0
-    auto_augment: false #changed from true
+    auto_augment: false
     file_format: 1
     dataset: EK100
     # e.g. /home/username/EPIC-KITCHENS
-    base_path: /home/jefferyfan/lab/data/ek100_toy_384_alt2_p01_big/videos
-    dataset_train: /home/jefferyfan/lab/data/ek100_toy_384_alt2_p01_big/EPIC_100_train_toy_p01_big.csv
-    dataset_val: /home/jefferyfan/lab/data/ek100_toy_384_alt2_p01_big/EPIC_100_validation_toy_p01_big.csv
-    frames_per_clip: 48
+    base_path: /home/jefferyfan/lab/data/ek100_toy_384_alt2/videos
+    dataset_train: /home/jefferyfan/lab/data/ek100_toy_384_alt2/EPIC_100_train_toy.csv
+    dataset_val: /home/jefferyfan/lab/data/ek100_toy_384_alt2/EPIC_100_validation_toy.csv
+    frames_per_clip: 32
     future_frames_per_clip: 8
     frames_per_second: 8
     motion_shift: false
@@ -29,8 +29,8 @@ experiment:
     random_resize_scale:
     - 0.08
     - 1.0
-    reprob: 0.25 # was 0.25
-    resolution: 384 #changed from 384
+    reprob: 0.25
+    resolution: 256
     train_anticipation_point:
     - 0.0
     - 0.25
@@ -167,18 +167,16 @@ experiment:
         final_lr: 0.0
         warmup: 0.
 model_kwargs:
-  checkpoint: /home/jefferyfan/lab/EventSegmentation/checkpoints/vjepa2_1_vitb_dist_vitG_384.pt
+  checkpoint: /home/jefferyfan/lab/EventSegmentation/checkpoints/vitl.pt
   module_name: evals.representation_anticipation_frozen.modelcustom.vit_encoder_predictor_concat_ar
   wrapper_kwargs:
     no_predictor: false
     num_output_frames: 2
-    num_steps: 4    # Might try num_output_frames=16, step=1 later
+    num_steps: 4
   pretrain_kwargs:
-    use_v2_1: true
     encoder:
-      model_name: vit_base
-      checkpoint_key: ema_encoder
-      img_temporal_dim_size: 1
+      model_name: vit_large
+      checkpoint_key: target_encoder
       tubelet_size: 2
       patch_size: 16
       uniform_power: true
@@ -190,11 +188,7 @@ model_kwargs:
       depth: 12
       num_heads: 12
       predictor_embed_dim: 384
-      teacher_embed_dim: 1664
-      num_mask_tokens: 8
-      n_output_distillation: 1
-      return_all_tokens: true
-      img_temporal_dim_size: 1
+      num_mask_tokens: 10
       uniform_power: true
       use_mask_tokens: true
       use_sdpa: true

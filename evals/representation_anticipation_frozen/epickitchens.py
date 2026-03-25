@@ -110,7 +110,7 @@ class decode_videos_to_clips(wds.PipelineStage):
 
             # -- load clips corresponding to action annotations
             try:
-                vr = VideoReader(path, num_threads=4, ctx=cpu(0))
+                vr = VideoReader(path, num_threads=8, ctx=cpu(0))
                 vr.seek(0)
                 # --
                 vfps = vr.get_avg_fps()
