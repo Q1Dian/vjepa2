@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel
+from torch.utils.tensorboard import SummaryWriter
 
 from evals.representation_anticipation_frozen.dataloader import filter_annotations, init_data
 from evals.representation_anticipation_frozen.losses import topk_representation_loss
@@ -146,6 +147,7 @@ def main(args_eval, resume_preempt=False):
 
     if rank == 0:
         csv_logger = CSVLogger(log_file, ("%d", "epoch"), ("%.5f", "train-loss"), ("%.5f", "val-loss"))
+        tb_writer = SummaryWriter(log_dir=os.path.join(folder, "runs"))
 
     annotations = filter_annotations(
         dataset,
@@ -257,6 +259,9 @@ def main(args_eval, resume_preempt=False):
 
         if rank == 0:
             csv_logger.log(epoch + 1, train_loss, val_loss)
+            tb_writer.add_scalar("loss/train", train_loss, epoch + 1)
+            tb_writer.add_scalar("loss/val", val_loss, epoch + 1)
+            tb_writer.flush()
             print(f"[{epoch + 1:5d}] train loss: {train_loss:.5f} val loss: {val_loss:.5f}")
             torch.save(
                 {
@@ -268,6 +273,9 @@ def main(args_eval, resume_preempt=False):
                 },
                 latest_path,
             )
+
+    if rank == 0:
+        tb_writer.close()
 
 
 def train_one_epoch(
