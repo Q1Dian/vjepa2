@@ -3,7 +3,7 @@ tasks_per_node: 8
 cpus_per_task: 12
 tag: ek100-vitb16-384
 eval_name: representation_anticipation_frozen
-folder: /home/jefferyfan/lab/eval/vjepa2/evals_2_1/vitb-384/ek100
+folder: /home/jfan16/lab/eval/vjepa2/evals_2_1/
 resume_checkpoint: false
 experiment:
   classifier:
@@ -13,13 +13,13 @@ experiment:
     anticipation_time_sec: 
     - 1.0
     - 1.0
-    auto_augment: false #changed from true
+    auto_augment: true #changed from true
     file_format: 1
     dataset: EK100
     # e.g. /home/username/EPIC-KITCHENS
-    base_path: /home/jefferyfan/lab/data/ek100_toy_384_alt2/videos
-    dataset_train: /home/jefferyfan/lab/data/ek100_toy_384_alt2/EPIC_100_train_toy.csv
-    dataset_val: /home/jefferyfan/lab/data/ek100_toy_384_alt2/EPIC_100_validation_toy.csv
+    base_path: /home/jfan16/lab/data/ek100_P01/videos
+    dataset_train: /home/jfan16/lab/data/ek100_P01/EPIC_100_train_P01.csv
+    dataset_val: /home/jfan16/lab/data/ek100_P01/EPIC_100_val_P01.csv
     frames_per_clip: 32
     future_frames_per_clip: 8
     frames_per_second: 8
@@ -167,7 +167,7 @@ experiment:
         final_lr: 0.0
         warmup: 0.
 model_kwargs:
-  checkpoint: /home/jefferyfan/lab/EventSegmentation/checkpoints/vjepa2_1_vitb_dist_vitG_384.pt
+  checkpoint: /home/jfan16/lab/EventSegmentation/checkpoints/vjepa2_1_vitb_dist_vitG_384.pt
   module_name: evals.representation_anticipation_frozen.modelcustom.vit_encoder_predictor_concat_ar
   wrapper_kwargs:
     no_predictor: false
