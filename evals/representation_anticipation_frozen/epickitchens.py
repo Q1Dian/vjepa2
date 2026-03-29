@@ -142,9 +142,9 @@ class decode_videos_to_clips(wds.PipelineStage):
 
                 try:
                     context_buffer = vr.get_batch(context_indices).asnumpy()
-                    vr.seek(0)
+                    vr.seek(0)  # save RAM
                     future_buffer = vr.get_batch(future_indices).asnumpy()
-                    vr.seek(0)
+                    vr.seek(0)  # save RAM
                 except Exception as e:
                     logging.info(f"Encountered exception getting indices {e=}")
                     continue

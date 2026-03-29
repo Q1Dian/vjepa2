@@ -5,6 +5,7 @@
 
 import os
 import random
+import json
 
 import numpy as np
 import torch
@@ -144,8 +145,11 @@ def main(args_eval, resume_preempt=False):
     os.makedirs(folder, exist_ok=True)
     log_file = os.path.join(folder, f"log_r{rank}.csv")
     latest_path = os.path.join(folder, "latest.pt")
+    config_path = os.path.join(folder, "config_eval.json")
 
     if rank == 0:
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(args_eval, f, indent=2, sort_keys=True)
         csv_logger = CSVLogger(log_file, ("%d", "epoch"), ("%.5f", "train-loss"), ("%.5f", "val-loss"))
         tb_writer = SummaryWriter(log_dir=os.path.join(folder, "runs"))
 
