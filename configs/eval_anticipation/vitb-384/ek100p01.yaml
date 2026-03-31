@@ -1,36 +1,36 @@
 nodes: 8
 tasks_per_node: 8
 cpus_per_task: 12
-tag: ek100-vitb16-384
+tag: ek100p01-vitb16-384-rep
 eval_name: representation_anticipation_frozen
-folder: /home/jefferyfan/lab/eval/vjepa2/evals_2_1/vitb-384/ek100p01
+folder: /home/jefferyfan/lab/eval/EventSegmentation/
 resume_checkpoint: false
 experiment:
   classifier:
     num_probe_blocks: 4
     num_heads: 16
   data:
-    anticipation_time_sec: 
+    anticipation_time_sec:
     - 1.0
     - 1.0
-    auto_augment: false #changed from true
-    file_format: 1
+    auto_augment: true
+    file_format: 1  # 0: pid/videos/*.mp4 1: pid/*.mp4
     dataset: EK100
-    # e.g. /home/username/EPIC-KITCHENS
-    base_path: /home/jefferyfan/lab/data/ek100_toy_384_alt2_p01_big/videos
-    dataset_train: /home/jefferyfan/lab/data/ek100_toy_384_alt2_p01_big/EPIC_100_train_toy_p01_big.csv
-    dataset_val: /home/jefferyfan/lab/data/ek100_toy_384_alt2_p01_big/EPIC_100_validation_toy_p01_big.csv
-    frames_per_clip: 48
-    future_frames_per_clip: 8
+    # e.g. /home/username/EPIC-KITCHENS 
+    base_path: /home/jefferyfan/lab/data/ek100_p01/videos
+    dataset_train: /home/jefferyfan/lab/data/ek100_p01/EPIC_100_train_P01.csv
+    dataset_val: /home/jefferyfan/lab/data/ek100_p01/EPIC_100_val_P01.csv
+    frames_per_clip: 32
+    anticipation_frames: 8
     frames_per_second: 8
     motion_shift: false
-    num_workers: 10
+    num_workers: 2
     pin_memory: true
     random_resize_scale:
     - 0.08
     - 1.0
-    reprob: 0.25 # was 0.25
-    resolution: 384 #changed from 384
+    reprob: 0.25 # patch wise dropout i guess?
+    resolution: 384
     train_anticipation_point:
     - 0.0
     - 0.25
@@ -41,12 +41,13 @@ experiment:
     num_epochs: 20
     batch_size: 2
     use_bfloat16: true
+    use_focal_loss: false
     topk_ratio: 1
     multihead_kwargs:
       - weight_decay: 0.0001
         final_weight_decay: 0.0001
-        lr: 0.001
-        start_lr: 0.001
+        lr: 0.005   #0.001 worked better before rewrite
+        start_lr: 0.005 #0.001 worked better before rewrite
         final_lr: 0.0
         warmup: 0.
       - weight_decay: 0.0001
@@ -172,7 +173,7 @@ model_kwargs:
   wrapper_kwargs:
     no_predictor: false
     num_output_frames: 2
-    num_steps: 4    # Might try num_output_frames=16, step=1 later
+    num_steps: 4    #anticipation frames / 2
   pretrain_kwargs:
     use_v2_1: true
     encoder:

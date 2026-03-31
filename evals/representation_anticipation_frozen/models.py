@@ -103,13 +103,9 @@ def init_module(
         )
         .to(device)
     )
-
-    model.encoder.eval()
-    model.predictor.train()
-    for p in model.encoder.parameters():
+    model.eval()
+    for p in model.parameters():
         p.requires_grad = False
-    for p in model.predictor.parameters():
-        p.requires_grad = True
     print(model)
     return model
 

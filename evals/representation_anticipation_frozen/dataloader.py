@@ -11,8 +11,8 @@ import torchvision.transforms as transforms
 
 import src.datasets.utils.video.transforms as video_transforms
 import src.datasets.utils.video.volume_transforms as volume_transforms
-from evals.representation_anticipation_frozen.epickitchens import filter_annotations as ek100_filter_annotations
-from evals.representation_anticipation_frozen.epickitchens import make_webvid as ek100_make_webvid
+from evals.action_anticipation_frozen.epickitchens import filter_annotations as ek100_filter_annotations
+from evals.action_anticipation_frozen.epickitchens import make_webvid as ek100_make_webvid
 from src.datasets.utils.video.randerase import RandomErasing
 
 _GLOBAL_SEED = 0
@@ -25,7 +25,6 @@ def init_data(
     batch_size,
     dataset,
     frames_per_clip=16,
-    future_frames_per_clip=16,
     fps=5,
     crop_size=224,
     rank=0,
@@ -70,7 +69,6 @@ def init_data(
         batch_size=batch_size,
         transform=transform,
         frames_per_clip=frames_per_clip,
-        future_frames_per_clip=future_frames_per_clip,
         num_workers=num_workers,
         fps=fps,
         decode_video=decode_video,

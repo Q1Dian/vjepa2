@@ -84,7 +84,6 @@ class decode_videos_to_clips(wds.PipelineStage):
         self,
         annotations,
         frames_per_clip=16,
-        future_frames_per_clip=16,
         fps=5,
         transform=None,
         anticipation_time_sec=[0.0, 0.0],
@@ -92,7 +91,6 @@ class decode_videos_to_clips(wds.PipelineStage):
     ):
         self.annotations = annotations
         self.frames_per_clip = frames_per_clip
-        self.future_frames_per_clip = future_frames_per_clip
         self.fps = fps
         self.transform = transform
         self.anticipation_time = anticipation_time_sec
@@ -110,20 +108,21 @@ class decode_videos_to_clips(wds.PipelineStage):
 
             # -- load clips corresponding to action annotations
             try:
-                vr = VideoReader(path, num_threads=8, ctx=cpu(0))
+                vr = VideoReader(path, num_threads=-1, ctx=cpu(0))
                 vr.seek(0)
                 # --
                 vfps = vr.get_avg_fps()
                 fpc = self.frames_per_clip
-                future_fpc = self.future_frames_per_clip
                 fstp = int(vfps / self.fps)
                 nframes = int(fpc * fstp)
-                future_nframes = int(future_fpc * fstp)
             except Exception as e:
                 logging.info(f"Encountered exception loading video {e=}")
                 continue
 
             for i, (sf, ef) in enumerate(zip(start_frames, stop_frames)):
+                labels_verb = int(ano["verb_class"].values[i])
+                labels_noun = int(ano["noun_class"].values[i])
+
                 # sample an anticipation time
                 at = random.uniform(*self.anticipation_time)
                 aframes = int(at * vfps)
@@ -132,29 +131,24 @@ class decode_videos_to_clips(wds.PipelineStage):
                 ap = random.uniform(*self.anticipation_point)
                 af = int(sf * ap + (1 - ap) * ef - aframes)
 
-                context_indices = np.arange(af - nframes, af, fstp).astype(np.int64)
-                future_indices = np.arange(af, af + future_nframes, fstp).astype(np.int64)
-
-                context_indices[context_indices < 0] = 0
-                future_indices[future_indices < 0] = 0
-                context_indices[context_indices >= len(vr)] = len(vr) - 1
-                future_indices[future_indices >= len(vr)] = len(vr) - 1
+                indices = np.arange(af - nframes, af, fstp).astype(np.int64)
+                # If not enough frames in video for anticipation, just pad with
+                # first frame
+                indices[indices < 0] = 0
 
                 try:
-                    context_buffer = vr.get_batch(context_indices).asnumpy()
-                    vr.seek(0)  # save RAM
-                    future_buffer = vr.get_batch(future_indices).asnumpy()
-                    vr.seek(0)  # save RAM
+                    buffer = vr.get_batch(indices).asnumpy()
                 except Exception as e:
                     logging.info(f"Encountered exception getting indices {e=}")
                     continue
 
-                buffer = np.concatenate([context_buffer, future_buffer], axis=0)
                 if self.transform is not None:
                     buffer = self.transform(buffer)
 
                 yield dict(
                     video=buffer,
+                    verb=labels_verb,
+                    noun=labels_noun,
                     anticipation_time=at,
                 )
 
@@ -202,7 +196,7 @@ def get_video_wds_dataset(
         split_by_node(rank=rank, world_size=world_size),
         wds.split_by_worker,
         video_decoder,
-        wds.to_tuple("video", "anticipation_time"),
+        wds.to_tuple("video", "verb", "noun", "anticipation_time"),
         wds.batched(batch_size, partial=True, collation_fn=torch.utils.data.default_collate),
     ]
     dataset = wds.DataPipeline(*pipeline)
@@ -230,32 +224,36 @@ def filter_annotations(
     tdf = pd.read_csv(train_annotations_path)
     vdf = pd.read_csv(val_annotations_path)
 
+    # 1. Remove actions in val that are not in train
+    tactions = set([(v, n) for v, n in zip(tdf["verb_class"].values, tdf["noun_class"].values)])
+    tverbs = set([v for v, _ in tactions])
+    tnouns = set([n for _, n in tactions])
+    keep_inds = [(v, n) in tactions for v, n in zip(vdf["verb_class"].values, vdf["noun_class"].values)]
+    vdf = vdf[keep_inds]
+
+    # 2. Determine new class labels
+    verb_classes = {k: i for i, k in enumerate(tverbs)}
+    noun_classes = {k: i for i, k in enumerate(tnouns)}
+    action_classes = {k: i for i, k in enumerate(tactions)}
+
+    val_verb_classes = set([verb_classes[v] for v in vdf["verb_class"].values])
+    val_noun_classes = set([noun_classes[n] for n in vdf["noun_class"].values])
+    val_action_classes = set([action_classes[a] for a in zip(vdf["verb_class"].values, vdf["noun_class"].values)])
+
     def build_annotations(df):
         video_paths, annotations = [], {}
         unique_videos = list(dict.fromkeys(df["video_id"].values))
         for uv in unique_videos:
             pid = uv.split("_")[0]
-            candidate_paths = []
+            # There are two common file formats for storing EK
             if file_format == 0:
-                candidate_paths.extend(
-                    [
-                        os.path.join(base_path, pid, "videos", uv + ".MP4"),
-                        os.path.join(base_path, "train", pid, "videos", uv + ".MP4"),
-                        os.path.join(base_path, "test", pid, "videos", uv + ".MP4"),
-                    ]
-                )
+                # File format 0: $base_path/$participant_id/videos/$video_id.MP4
+                fpath = os.path.join(base_path, pid, "videos", uv + ".MP4")
             else:
-                candidate_paths.extend(
-                    [
-                        os.path.join(base_path, pid, uv + ".MP4"),
-                        os.path.join(base_path, "train", pid, uv + ".MP4"),
-                        os.path.join(base_path, "test", pid, uv + ".MP4"),
-                    ]
-                )
-
-            fpath = next((p for p in candidate_paths if os.path.exists(p)), None)
-            if fpath is None:
-                logging.info(f"file path not found for {uv=}; tried {candidate_paths}")
+                # File format 1: $base_path/$participant_id/$video_id.MP4
+                fpath = os.path.join(base_path, pid, uv + ".MP4")
+            if not os.path.exists(fpath):
+                logging.info(f"file path not found {fpath=}")
                 continue
             video_paths += [fpath]
             annotations[uv] = df[df["video_id"] == uv].sort_values(by="start_frame")
@@ -265,6 +263,12 @@ def filter_annotations(
     val_annotations = build_annotations(vdf)
 
     return dict(
+        verbs=verb_classes,
+        nouns=noun_classes,
+        actions=action_classes,
+        val_verbs=val_verb_classes,
+        val_nouns=val_noun_classes,
+        val_actions=val_action_classes,
         train=train_annotations,
         val=val_annotations,
     )
@@ -290,12 +294,10 @@ def make_webvid(
 
     paths, annotations = annotations_path
     num_clips = sum([len(a) for a in annotations.values()])
-    future_frames_per_clip = kwargs.get("future_frames_per_clip", 16)
 
     video_decoder = decode_videos_to_clips(
         annotations=annotations,
         frames_per_clip=frames_per_clip,
-        future_frames_per_clip=future_frames_per_clip,
         fps=fps,
         transform=transform,
         anticipation_time_sec=anticipation_time_sec,
