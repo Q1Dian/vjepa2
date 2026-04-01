@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-
 from logging import getLogger
 
 import torch
@@ -11,8 +10,7 @@ import torchvision.transforms as transforms
 
 import src.datasets.utils.video.transforms as video_transforms
 import src.datasets.utils.video.volume_transforms as volume_transforms
-from evals.action_anticipation_frozen.epickitchens import filter_annotations as ek100_filter_annotations
-from evals.action_anticipation_frozen.epickitchens import make_webvid as ek100_make_webvid
+from evals.representation_anticipation_frozen_hybrid.epickitchens import make_webvid as ek100_make_webvid
 from src.datasets.utils.video.randerase import RandomErasing
 
 _GLOBAL_SEED = 0
@@ -21,7 +19,7 @@ logger = getLogger()
 
 def init_data(
     base_path,
-    annotations_path,
+    csv_path,
     batch_size,
     dataset,
     frames_per_clip=16,
@@ -34,14 +32,14 @@ def init_data(
     pin_mem=True,
     persistent_workers=True,
     training=True,
-    decode_video=True,
-    anticipation_time_sec=0.0,
-    decode_one_clip=False,
     random_resize_scale=(0.9, 1.0),
     reprob=0,
     auto_augment=False,
     motion_shift=False,
-    anticipation_point=[0.1, 0.1],
+    anticipation_frames=8,
+    anticipation_gap=0.0,
+    sliding_window_stride_frames=4,
+    file_format=1,
 ):
     # -- make video transformations
     transform = make_transforms(
@@ -60,44 +58,25 @@ def init_data(
         make_webvid = ek100_make_webvid
 
     dataset, data_loader, data_info = make_webvid(
-        training=training,
-        decode_one_clip=decode_one_clip,
-        world_size=world_size,
-        rank=rank,
         base_path=base_path,
-        annotations_path=annotations_path,
+        video_list_path=csv_path,
         batch_size=batch_size,
         transform=transform,
         frames_per_clip=frames_per_clip,
-        num_workers=num_workers,
         fps=fps,
-        decode_video=decode_video,
-        anticipation_time_sec=anticipation_time_sec,
+        num_workers=num_workers,
+        world_size=world_size,
+        rank=rank,
         persistent_workers=persistent_workers,
         pin_memory=pin_mem,
-        anticipation_point=anticipation_point,
+        training=training,
+        anticipation_frames=anticipation_frames,
+        anticipation_gap=anticipation_gap,
+        sliding_window_stride_frames=sliding_window_stride_frames,
+        file_format=file_format,
     )
 
     return dataset, data_loader, data_info
-
-
-def filter_annotations(
-    dataset,
-    base_path,
-    train_annotations_path,
-    val_annotations_path,
-    **kwargs,
-):
-    _filter = None
-    if "ek100" in dataset.lower():
-        _filter = ek100_filter_annotations
-
-    return _filter(
-        base_path=base_path,
-        train_annotations_path=train_annotations_path,
-        val_annotations_path=val_annotations_path,
-        **kwargs,
-    )
 
 
 def make_transforms(
@@ -111,7 +90,6 @@ def make_transforms(
     crop_size=224,
     normalize=((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
 ):
-
     transform = VideoTransform(
         training=training,
         random_horizontal_flip=random_horizontal_flip,
@@ -123,12 +101,10 @@ def make_transforms(
         crop_size=crop_size,
         normalize=normalize,
     )
-
     return transform
 
 
 class VideoTransform(object):
-
     def __init__(
         self,
         training=True,
@@ -141,9 +117,7 @@ class VideoTransform(object):
         crop_size=224,
         normalize=((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ):
-
         self.training = training
-
         short_side_size = int(crop_size * 256 / 224)
         self.eval_transform = video_transforms.Compose(
             [
@@ -182,7 +156,6 @@ class VideoTransform(object):
         )
 
     def __call__(self, buffer):
-
         if not self.training:
             return self.eval_transform(buffer)
 
@@ -217,13 +190,6 @@ class VideoTransform(object):
 
 
 def tensor_normalize(tensor, mean, std):
-    """
-    Normalize a given tensor by subtracting the mean and dividing the std.
-    Args:
-        tensor (tensor): tensor to normalize.
-        mean (tensor or list): mean value to subtract.
-        std (tensor or list): std to divide.
-    """
     if tensor.dtype == torch.uint8:
         tensor = tensor.float()
         tensor = tensor / 255.0
