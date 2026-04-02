@@ -7,6 +7,7 @@ import os
 import random
 import json
 import logging
+import math
 
 import numpy as np
 import torch
@@ -17,6 +18,7 @@ from torch.utils.tensorboard import SummaryWriter
 from evals.representation_anticipation_frozen_hybrid.dataloader import init_data
 from evals.representation_anticipation_frozen_hybrid.losses import topk_representation_loss
 from evals.representation_anticipation_frozen_hybrid.models import init_module
+from evals.representation_anticipation_frozen_hybrid.utils import WarmupCosineLRSchedule, CosineWDSchedule
 from src.utils.checkpoint_loader import robust_checkpoint_loader
 from src.utils.distributed import init_distributed
 from src.utils.logging import AverageMeter, CSVLogger
@@ -122,6 +124,11 @@ def main(args_eval, resume_preempt=False):
     first_opt = (args_opt.get("multihead_kwargs") or [{}])[0]
     optimizer_lr = first_opt.get("lr", args_opt.get("lr", 1e-4))
     optimizer_wd = first_opt.get("weight_decay", args_opt.get("weight_decay", 1e-4))
+    # -- Scheduler parameters
+    warmup_fraction = first_opt.get("warmup", args_opt.get("warmup", 0.1))
+    start_lr = first_opt.get("start_lr", args_opt.get("start_lr", 0.0))
+    final_lr = first_opt.get("final_lr", args_opt.get("final_lr", 0.0))
+    final_wd = first_opt.get("final_weight_decay", args_opt.get("final_weight_decay", 0.0))
 
     try:
         mp.set_start_method("spawn")
@@ -173,11 +180,26 @@ def main(args_eval, resume_preempt=False):
     patches_per_step = int(model_core.grid_size**2) if hasattr(model_core, "grid_size") else None
     if world_size > 1:
         model = DistributedDataParallel(model, static_graph=True)
+    # -- Use custom param groups for scheduler support
+    param_groups = [
+        {
+            "params": (p for p in model.parameters() if p.requires_grad),
+            "mc_warmup_steps": None,  # Will be set after dataloader is ready
+            "mc_start_lr": start_lr,
+            "mc_ref_lr": optimizer_lr,
+            "mc_final_lr": final_lr,
+            "mc_ref_wd": optimizer_wd,
+            "mc_final_wd": final_wd,
+        }
+    ]
     optimizer = torch.optim.AdamW(
-        (p for p in model.parameters() if p.requires_grad),
+        param_groups,
         lr=optimizer_lr,
         weight_decay=optimizer_wd,
     )
+    # Placeholder schedulers (will be replaced after dataloader init)
+    lr_scheduler = None
+    wd_scheduler = None
 
     start_epoch = 0
     if resume_checkpoint and os.path.exists(latest_path):
@@ -212,6 +234,19 @@ def main(args_eval, resume_preempt=False):
         file_format=file_format,
     )
     logger.info(f"Train dataloader ready with num_batches={train_loader.num_batches}")
+
+    # -- Initialize schedulers now that we know iterations per epoch
+    ite = train_loader.num_batches
+    optimizer.param_groups[0]["mc_warmup_steps"] = int(warmup_fraction * ite)
+    lr_scheduler = WarmupCosineLRSchedule(optimizer, T_max=int(num_epochs * ite))
+    wd_scheduler = CosineWDSchedule(optimizer, T_max=int(num_epochs * ite))
+
+    # -- Skip past already-completed steps if resuming
+    if resume_checkpoint and start_epoch > 0:
+        for _ in range(start_epoch * ite):
+            lr_scheduler.step()
+            wd_scheduler.step()
+
     _, val_loader, _ = init_data(
         dataset=dataset,
         training=False,
@@ -245,6 +280,8 @@ def main(args_eval, resume_preempt=False):
                 device=device,
                 model=model,
                 optimizer=optimizer,
+                lr_scheduler=lr_scheduler,
+                wd_scheduler=wd_scheduler,
                 data_loader=train_loader,
                 anticipation_gap=anticipation_gap,
                 use_bfloat16=use_bfloat16,
@@ -292,6 +329,8 @@ def train_one_epoch(
     device,
     model,
     optimizer,
+    lr_scheduler,
+    wd_scheduler,
     data_loader,
     anticipation_gap,
     use_bfloat16,
@@ -311,6 +350,11 @@ def train_one_epoch(
         except StopIteration:
             logger.info(f"Training dataloader exhausted early at step {step_idx}/{data_loader.num_batches}")
             break
+
+        # -- Step learning rate and weight decay schedulers
+        lr_scheduler.step()
+        wd_scheduler.step()
+
         context_clips = batch[0].to(device)
         future_clips = batch[1].to(device)
         anticipation_times = torch.full((context_clips.size(0),), anticipation_gap, device=device)
